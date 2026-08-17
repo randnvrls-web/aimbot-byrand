@@ -1,12 +1,13 @@
 --[[
-    🔥 SIMPLE AIM + ESP 🔥
+    🔥 AUTO AIM + ESP (AGGRESSIVE + DRAGGABLE) 🔥
     Fitur:
-        1. Auto Aim (smooth, line of sight, prioritaskan terdekat)
-        2. ESP (box + nama, jarak terbatas, warna berdasarkan HP)
+        1. Auto Aim INSTANT (nempel, agresif)
+        2. ESP (box + nama + jarak)
+        3. GUI bisa digeser
     Kontrol:
-        - Tombol GUI
-        - GUI bisa digeser
-        - F2: Toggle Aim | F3: Toggle ESP
+        - F2: Toggle Auto Aim
+        - F3: Toggle ESP
+        - Geser title untuk pindah UI
 --]]
 
 local Players = game:GetService("Players")
@@ -20,15 +21,11 @@ local Workspace = game:GetService("Workspace")
 -- KONFIGURASI
 -- ================================================================
 local CONFIG = {
-    AIM_DISTANCE = 300,
+    AIM_DISTANCE = 350,
     ESP_DISTANCE = 200,
-    AIM_SMOOTH = 0.4,        -- 0 = instant, 1 = sangat smooth
     TEAM_CHECK = true,
 }
 
--- ================================================================
--- VARIABEL
--- ================================================================
 local aimEnabled = false
 local espEnabled = false
 local espObjects = {}
@@ -48,28 +45,33 @@ local function hasLineOfSight(origin, target)
 end
 
 -- ================================================================
--- GET TARGET TERDEKAT YANG TERLIHAT
+-- GET TARGET TERDEKAT (UNTUK AUTO AIM)
 -- ================================================================
 local function getTarget()
-    local myPos = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local myPos = char:FindFirstChild("HumanoidRootPart")
     if not myPos then return nil end
 
     local best, bestDist = nil, math.huge
 
     for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            local hum = p.Character:FindFirstChild("Humanoid")
-            if hrp and hum and hum.Health > 0 then
-                if CONFIG.TEAM_CHECK then
-                    local t1, t2 = LocalPlayer.Team, p.Team
-                    if t1 and t2 and t1 == t2 then goto skip end
-                end
-                local dist = (hrp.Position - myPos.Position).Magnitude
-                if dist <= CONFIG.AIM_DISTANCE and hasLineOfSight(myPos.Position, hrp) then
-                    if dist < bestDist then
-                        bestDist = dist
-                        best = p
+        if p ~= LocalPlayer then
+            local enemyChar = p.Character
+            if enemyChar then
+                local hrp = enemyChar:FindFirstChild("HumanoidRootPart")
+                local hum = enemyChar:FindFirstChild("Humanoid")
+                if hrp and hum and hum.Health > 0 then
+                    if CONFIG.TEAM_CHECK then
+                        local t1, t2 = LocalPlayer.Team, p.Team
+                        if t1 and t2 and t1 == t2 then goto skip end
+                    end
+                    local dist = (hrp.Position - myPos.Position).Magnitude
+                    if dist <= CONFIG.AIM_DISTANCE and hasLineOfSight(myPos.Position, hrp) then
+                        if dist < bestDist then
+                            bestDist = dist
+                            best = p
+                        end
                     end
                 end
             end
@@ -80,31 +82,32 @@ local function getTarget()
 end
 
 -- ================================================================
--- AUTO AIM LOOP
+-- AUTO AIM LOOP (AGGRESSIVE / INSTANT)
 -- ================================================================
 RunService.RenderStepped:Connect(function()
     if aimEnabled then
         local target = getTarget()
-        if target and target.Character then
-            local head = target.Character:FindFirstChild("Head")
-            if head then
-                local targetPos = head.Position
-                local current = Camera.CFrame
-                local targetCF = CFrame.lookAt(current.Position, targetPos)
-                local smooth = 1 - CONFIG.AIM_SMOOTH
-                Camera.CFrame = current:Lerp(targetCF, smooth)
+        if target then
+            local char = target.Character
+            if char then
+                local head = char:FindFirstChild("Head")
+                if head then
+                    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, head.Position)
+                end
             end
         end
     end
 end)
 
 -- ================================================================
--- ESP
+-- ESP (DRAWING)
 -- ================================================================
 local function clearESP()
     for _, obj in pairs(espObjects) do
-        obj.box.Visible = false
-        obj.name.Visible = false
+        pcall(function()
+            obj.box.Visible = false
+            obj.name.Visible = false
+        end)
     end
     espObjects = {}
 end
@@ -113,70 +116,82 @@ local function updateESP()
     clearESP()
     if not espEnabled then return end
 
-    local myPos = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local char = LocalPlayer.Character
+    if not char then return end
+    local myPos = char:FindFirstChild("HumanoidRootPart")
     if not myPos then return end
 
     for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            local hum = p.Character:FindFirstChild("Humanoid")
-            if hrp and hum and hum.Health > 0 then
-                local dist = (hrp.Position - myPos.Position).Magnitude
-                if dist <= CONFIG.ESP_DISTANCE then
-                    local pos, onScreen = Camera:WorldToScreenPoint(hrp.Position)
-                    if onScreen then
-                        local size = 2.5
-                        local h = 4.5 * size
-                        local w = 2.2 * size
-                        local top = pos.Y - h/2
-                        local left = pos.X - w/2
+        if p ~= LocalPlayer then
+            local enemyChar = p.Character
+            if enemyChar then
+                local hrp = enemyChar:FindFirstChild("HumanoidRootPart")
+                local hum = enemyChar:FindFirstChild("Humanoid")
+                if hrp and hum and hum.Health > 0 then
+                    if CONFIG.TEAM_CHECK then
+                        local t1, t2 = LocalPlayer.Team, p.Team
+                        if t1 and t2 and t1 == t2 then goto skip2 end
+                    end
+                    local dist = (hrp.Position - myPos.Position).Magnitude
+                    if dist <= CONFIG.ESP_DISTANCE then
+                        local pos, onScreen = Camera:WorldToScreenPoint(hrp.Position)
+                        if onScreen then
+                            -- Ukuran box
+                            local size = 2.5
+                            local h = 4.5 * size
+                            local w = 2.2 * size
+                            local top = pos.Y - h/2
+                            local left = pos.X - w/2
 
-                        local box = Drawing.new("Square")
-                        box.Thickness = 1
-                        box.Color = Color3.new(1, 0, 0)
-                        box.Transparency = 1
-                        box.Visible = true
-                        box.Filled = false
-                        box.From = Vector2.new(left, top)
-                        box.To = Vector2.new(left + w, top + h)
+                            -- Box
+                            local box = Drawing.new("Square")
+                            box.Thickness = 1
+                            box.Color = Color3.new(1, 0, 0)
+                            box.Transparency = 1
+                            box.Visible = true
+                            box.Filled = false
+                            box.From = Vector2.new(left, top)
+                            box.To = Vector2.new(left + w, top + h)
 
-                        local name = Drawing.new("Text")
-                        name.Size = 12
-                        name.Color = Color3.new(1, 1, 1)
-                        name.Center = true
-                        name.Visible = true
-                        name.Text = p.Name
-                        name.Position = Vector2.new(pos.X, top - 15)
+                            -- Nama + Jarak
+                            local name = Drawing.new("Text")
+                            name.Size = 12
+                            name.Color = Color3.new(1, 1, 1)
+                            name.Center = true
+                            name.Visible = true
+                            name.Text = string.format("%s [%.0fs]", p.Name, dist)
+                            name.Position = Vector2.new(pos.X, top - 15)
 
-                        table.insert(espObjects, { box = box, name = name })
+                            table.insert(espObjects, { box = box, name = name })
+                        end
                     end
                 end
             end
         end
+        ::skip2::
     end
 end
 
 RunService.RenderStepped:Connect(updateESP)
 
 -- ================================================================
--- GUI (DRAGGABLE + MINIMALIS)
+-- GUI DRAGGABLE (dengan 2 tombol: Aim + ESP)
 -- ================================================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Parent = LocalPlayer.PlayerGui
 screenGui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 200, 0, 120)
-frame.Position = UDim2.new(0.5, -100, 0.5, -60)
+frame.Size = UDim2.new(0, 180, 0, 120)
+frame.Position = UDim2.new(0.5, -90, 0.5, -60)
 frame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.15)
-frame.BackgroundTransparency = 0.4
+frame.BackgroundTransparency = 0.5
 frame.Parent = screenGui
 
 -- Title (drag handle)
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
-title.Position = UDim2.new(0, 0, 0, 0)
-title.Text = "🔥 SIMPLE AIM + ESP"
+title.Text = "🎯 AIM + ESP"
 title.BackgroundTransparency = 0.5
 title.BackgroundColor3 = Color3.new(0.2, 0.2, 0.3)
 title.TextColor3 = Color3.new(1, 0.5, 0)
@@ -185,7 +200,7 @@ title.Parent = frame
 
 -- Auto Aim Button
 local aimBtn = Instance.new("TextButton")
-aimBtn.Size = UDim2.new(0.8, 0, 0, 30)
+aimBtn.Size = UDim2.new(0.8, 0, 0, 28)
 aimBtn.Position = UDim2.new(0.1, 0, 0.35, 0)
 aimBtn.Text = "Auto Aim: OFF"
 aimBtn.BackgroundColor3 = Color3.new(0.2, 0.2, 0.3)
@@ -198,7 +213,7 @@ end)
 
 -- ESP Button
 local espBtn = Instance.new("TextButton")
-espBtn.Size = UDim2.new(0.8, 0, 0, 30)
+espBtn.Size = UDim2.new(0.8, 0, 0, 28)
 espBtn.Position = UDim2.new(0.1, 0, 0.7, 0)
 espBtn.Text = "ESP: OFF"
 espBtn.BackgroundColor3 = Color3.new(0.2, 0.2, 0.3)
@@ -213,7 +228,9 @@ end)
 -- ================================================================
 -- DRAG LOGIC
 -- ================================================================
-local dragging, dragStart, frameStart = false
+local dragging = false
+local dragStart = nil
+local frameStart = nil
 
 local function startDrag(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -244,7 +261,7 @@ title.InputChanged:Connect(moveDrag)
 title.InputEnded:Connect(endDrag)
 
 -- ================================================================
--- KEYBINDS (F2 = Aim, F3 = ESP)
+-- KEYBINDS
 -- ================================================================
 UserInputService.InputBegan:Connect(function(input, g)
     if g then return end
@@ -258,5 +275,6 @@ UserInputService.InputBegan:Connect(function(input, g)
     end
 end)
 
-print("✅ Simple Aim + ESP loaded!")
+print("✅ Auto Aim + ESP loaded!")
 print("   F2: Toggle Aim | F3: Toggle ESP")
+print("   Geser GUI dengan menahan title.")
