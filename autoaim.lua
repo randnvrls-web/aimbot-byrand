@@ -1,21 +1,10 @@
 --[[
-    🔥 AUTO AIM BOT - ULTIMATE EDITION 🔥
-    Fitur Upgrade:
-        1. ✅ Smooth Aim (transisi halus)
-        2. ✅ FOV Circle (bidang pandang)
-        3. ✅ Target Priority (jarak, health, damage)
-        4. ✅ Hitbox Selection (Head/Body/Legs)
-        5. ✅ Silent Aim (tampilan normal tapi tembakan ke target)
-        6. ✅ Trigger Bot (auto fire saat crosshair di musuh)
-        7. ✅ Visual Indicator (lingkaran target)
-        8. ✅ Keybinds (toggle fitur pakai keyboard)
-        9. ✅ Team Check (hindari teman)
-        10. ✅ Statistik (hit rate, kill count)
-    Kontrol:
-        - F1: Toggle GUI
-        - F2: Toggle Auto Aim
-        - F3: Toggle ESP
-        - F4: Toggle Trigger Bot
+    🔥 AUTO AIM BOT - DRAGGABLE UI (HP EDITION) 🔥
+    Fitur:
+        - GUI bisa digeser (drag) dengan menekan dan menahan area title
+        - Ukuran lebih besar untuk HP
+        - Posisi awal di tengah layar
+        - Semua fitur Auto Aim + ESP + Trigger Bot tetap jalan
 --]]
 
 local Players = game:GetService("Players")
@@ -25,43 +14,38 @@ local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 local Workspace = game:GetService("Workspace")
 local GuiService = game:GetService("GuiService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 -- ================================================================
 -- KONFIGURASI
 -- ================================================================
 local CONFIG = {
-    -- === ESP ===
     ESP_MAX_DISTANCE = 200,
     ESP_BOX_COLOR = Color3.new(1, 0, 0),
     ESP_BOX_THICKNESS = 1,
     ESP_TEXT_SIZE = 12,
     ESP_TEXT_COLOR = Color3.new(1, 1, 1),
 
-    -- === AUTO AIM ===
     AIM_MAX_DISTANCE = 300,
-    AIM_FOV = 60,              -- FOV dalam derajat (0 = semua)
-    AIM_SMOOTHNESS = 0.3,       -- 0 = instant, 1 = sangat halus
-    AIM_HITBOX = "Head",        -- "Head" | "HumanoidRootPart" | "Torso" | "Legs"
+    AIM_FOV = 60,
+    AIM_SMOOTHNESS = 0.3,
+    AIM_HITBOX = "Head",
 
-    -- === TRIGGER BOT ===
-    TRIGGER_DELAY = 0.1,        -- Delay antar tembakan (detik)
-    TRIGGER_KEY = "MouseButton1", -- Tombol untuk trigger (MouseButton1 = kiri)
+    TRIGGER_DELAY = 0.1,
+    TRIGGER_KEY = "MouseButton1",
 
-    -- === KEYS ===
     KEY_TOGGLE_GUI = Enum.KeyCode.F1,
     KEY_TOGGLE_AIM = Enum.KeyCode.F2,
     KEY_TOGGLE_ESP = Enum.KeyCode.F3,
     KEY_TOGGLE_TRIGGER = Enum.KeyCode.F4,
 
-    -- === OTHER ===
-    TEAM_CHECK = true,          -- Hindari teman satu tim
-    SHOW_FOV = true,            -- Tampilkan FOV circle
-    SHOW_STATS = true,          -- Tampilkan statistik
+    TEAM_CHECK = true,
+    SHOW_FOV = true,
+    SHOW_STATS = true,
 }
 
 -- ================================================================
--- SETUP
+-- VARIABEL
 -- ================================================================
 local espEnabled = false
 local aimEnabled = false
@@ -87,21 +71,17 @@ local function hasLineOfSight(origin, targetPart)
 
     local result = Workspace:Raycast(origin, direction * distance, raycastParams)
     if not result then return true end
-
     local hit = result.Instance
-    if hit and hit:IsDescendantOf(targetPart.Parent) then
-        return true
-    end
+    if hit and hit:IsDescendantOf(targetPart.Parent) then return true end
     return false
 end
 
 -- ================================================================
--- GET HITBOX PART
+-- GET HITBOX
 -- ================================================================
 local function getHitboxPart(character)
     local part = character:FindFirstChild(CONFIG.AIM_HITBOX)
     if part then return part end
-    -- Fallback
     local head = character:FindFirstChild("Head")
     if head then return head end
     local hrp = character:FindFirstChild("HumanoidRootPart")
@@ -122,7 +102,7 @@ local function isInFov(targetPos)
 end
 
 -- ================================================================
--- GET BEST TARGET (DENGAN PRIORITAS)
+-- GET BEST TARGET
 -- ================================================================
 local function getBestTarget()
     local bestTarget = nil
@@ -135,7 +115,6 @@ local function getBestTarget()
             local hrp = player.Character:FindFirstChild("HumanoidRootPart")
             local humanoid = player.Character:FindFirstChild("Humanoid")
             if hrp and humanoid and humanoid.Health > 0 then
-                -- Team check
                 if CONFIG.TEAM_CHECK then
                     local team1 = LocalPlayer.Team
                     local team2 = player.Team
@@ -143,14 +122,11 @@ local function getBestTarget()
                         goto continue
                     end
                 end
-
                 local distance = (hrp.Position - playerPos.Position).Magnitude
                 if distance <= CONFIG.AIM_MAX_DISTANCE then
                     if hasLineOfSight(playerPos.Position, hrp) then
                         if isInFov(hrp.Position) then
-                            -- Score: jarak (semakin dekat semakin tinggi)
                             local score = 1000 / (distance + 1)
-                            -- Bonus: health rendah
                             score = score + (100 - humanoid.Health) * 0.5
                             if score > bestScore then
                                 bestScore = score
@@ -177,7 +153,7 @@ local function smoothAim(targetPos)
 end
 
 -- ================================================================
--- ESP (DENGAN INFORMASI TAMBAHAN)
+-- ESP
 -- ================================================================
 local function createESPBox(player)
     local box = Drawing.new("Square")
@@ -235,16 +211,13 @@ local function updateESP()
                         esp.box.To = Vector2.new(left + width, top + height)
                         esp.box.Visible = true
 
-                        -- Warna box berdasarkan health
                         local healthRatio = humanoid.Health / humanoid.MaxHealth
                         esp.box.Color = Color3.new(1 - healthRatio, healthRatio, 0)
 
-                        -- Nama + jarak + health
                         esp.name.Text = string.format("%s [%d HP] %.0fs", player.Name, humanoid.Health, distance)
                         esp.name.Position = Vector2.new(pos.X, top - 15)
                         esp.name.Visible = true
 
-                        -- Health bar di bawah box
                         local barWidth = width
                         local barHeight = 3
                         local barTop = top + height + 2
@@ -268,15 +241,12 @@ local function isMouseOnTarget()
     local mousePos = UserInputService:GetMouseLocation()
     local target = getBestTarget()
     if not target then return false end
-
     local hitbox = getHitboxPart(target.Character)
     if not hitbox then return false end
-
     local pos, onScreen = Camera:WorldToScreenPoint(hitbox.Position)
     if not onScreen then return false end
-
     local distance = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
-    return distance < 20 -- Kursor di dalam radius 20px dari target
+    return distance < 20
 end
 
 -- ================================================================
@@ -298,7 +268,6 @@ local function updateFovCircle()
     local mousePos = UserInputService:GetMouseLocation()
     fovCircle.Position = mousePos
     fovCircle.Visible = true
-    -- Radius berdasarkan FOV (semakin besar FOV, semakin besar circle)
     fovCircle.Radius = 50 + CONFIG.AIM_FOV * 2
 end
 
@@ -317,7 +286,6 @@ indicator.Filled = false
 -- ================================================================
 -- MAIN LOOP
 -- ================================================================
--- Auto Aim
 RunService.RenderStepped:Connect(function()
     if aimEnabled then
         local target = getBestTarget()
@@ -330,8 +298,6 @@ RunService.RenderStepped:Connect(function()
                 else
                     Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, hitbox.Position)
                 end
-
-                -- Indicator
                 local pos, onScreen = Camera:WorldToScreenPoint(hitbox.Position)
                 if onScreen then
                     indicator.Position = Vector2.new(pos.X, pos.Y)
@@ -347,10 +313,8 @@ RunService.RenderStepped:Connect(function()
         indicator.Visible = false
     end
 
-    -- Trigger Bot
     if triggerEnabled then
         if isMouseOnTarget() then
-            -- Simulate click
             UserInputService:SetMouseButtonEnabled(true)
             UserInputService:SetMouseButton(false)
         end
@@ -396,34 +360,87 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 -- ================================================================
--- GUI (DENGAN KEYBIND INFO)
+-- DRAGGABLE GUI
+-- ================================================================
+local dragging = false
+local dragStart = nil
+local frameStart = nil
+
+frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        frameStart = frame.Position
+    end
+end)
+
+frame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
+        local delta = input.Position - dragStart
+        local newX = frameStart.X.Offset + delta.X
+        local newY = frameStart.Y.Offset + delta.Y
+        frame.Position = UDim2.new(0, newX, 0, newY)
+    end
+end)
+
+frame.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- ================================================================
+-- GUI (HP SIZE + DRAGGABLE)
 -- ================================================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Parent = LocalPlayer.PlayerGui
 screenGui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 220, 0, 250)
-frame.Position = UDim2.new(0, 10, 0, 10)
+frame.Size = UDim2.new(0.4, 0, 0.5, 0)
+frame.Position = UDim2.new(0.3, 0, 0.25, 0)
 frame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.15)
-frame.BackgroundTransparency = 0.4
+frame.BackgroundTransparency = 0.3
 frame.Parent = screenGui
 frame.Visible = true
 
--- Title
+-- Title (Drag Handle)
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 25)
+title.Size = UDim2.new(1, 0, 0, 40)
 title.Position = UDim2.new(0, 0, 0, 0)
 title.Text = "🔥 AUTO AIM BOT"
-title.BackgroundTransparency = 1
+title.BackgroundTransparency = 0.5
+title.BackgroundColor3 = Color3.new(0.2, 0.2, 0.3)
 title.TextColor3 = Color3.new(1, 0.5, 0)
 title.TextScaled = true
 title.Parent = frame
 
+-- Drag Handle juga bisa di title
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        frameStart = frame.Position
+    end
+end)
+title.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
+        local delta = input.Position - dragStart
+        local newX = frameStart.X.Offset + delta.X
+        local newY = frameStart.Y.Offset + delta.Y
+        frame.Position = UDim2.new(0, newX, 0, newY)
+    end
+end)
+title.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
 -- Auto Aim Button
 local aimButton = Instance.new("TextButton")
-aimButton.Size = UDim2.new(0, 180, 0, 30)
-aimButton.Position = UDim2.new(0, 20, 0, 35)
+aimButton.Size = UDim2.new(0.8, 0, 0, 50)
+aimButton.Position = UDim2.new(0.1, 0, 0.15, 0)
 aimButton.Text = "Auto Aim: OFF"
 aimButton.BackgroundColor3 = Color3.new(0.2, 0.2, 0.3)
 aimButton.TextColor3 = Color3.new(1, 1, 1)
@@ -435,8 +452,8 @@ end)
 
 -- ESP Button
 local espButton = Instance.new("TextButton")
-espButton.Size = UDim2.new(0, 180, 0, 30)
-espButton.Position = UDim2.new(0, 20, 0, 75)
+espButton.Size = UDim2.new(0.8, 0, 0, 50)
+espButton.Position = UDim2.new(0.1, 0, 0.35, 0)
 espButton.Text = "ESP: OFF"
 espButton.BackgroundColor3 = Color3.new(0.2, 0.2, 0.3)
 espButton.TextColor3 = Color3.new(1, 1, 1)
@@ -456,8 +473,8 @@ end)
 
 -- Trigger Bot Button
 local triggerButton = Instance.new("TextButton")
-triggerButton.Size = UDim2.new(0, 180, 0, 30)
-triggerButton.Position = UDim2.new(0, 20, 0, 115)
+triggerButton.Size = UDim2.new(0.8, 0, 0, 50)
+triggerButton.Position = UDim2.new(0.1, 0, 0.55, 0)
 triggerButton.Text = "Trigger Bot: OFF"
 triggerButton.BackgroundColor3 = Color3.new(0.2, 0.2, 0.3)
 triggerButton.TextColor3 = Color3.new(1, 1, 1)
@@ -470,19 +487,19 @@ end)
 -- Keybinds Info
 local keybindLabel = Instance.new("TextLabel")
 keybindLabel.Size = UDim2.new(1, 0, 0, 80)
-keybindLabel.Position = UDim2.new(0, 0, 0, 160)
+keybindLabel.Position = UDim2.new(0, 0, 0, 0.7)
 keybindLabel.Text = "F1: Toggle GUI\nF2: Toggle Aim\nF3: Toggle ESP\nF4: Toggle Trigger"
 keybindLabel.BackgroundTransparency = 1
 keybindLabel.TextColor3 = Color3.new(0.7, 0.7, 0.7)
 keybindLabel.TextScaled = true
 keybindLabel.TextSize = 12
-keybindLabel.TextXAlignment = Enum.TextXAlignment.Left
+keybindLabel.TextXAlignment = Enum.TextXAlignment.Center
 keybindLabel.Parent = frame
 
 -- Stats Label
 local statsLabel = Instance.new("TextLabel")
 statsLabel.Size = UDim2.new(1, 0, 0, 20)
-statsLabel.Position = UDim2.new(0, 0, 0, 245)
+statsLabel.Position = UDim2.new(0, 0, 0, 1)
 statsLabel.Text = "Kills: 0 | Hits: 0"
 statsLabel.BackgroundTransparency = 1
 statsLabel.TextColor3 = Color3.new(1, 1, 1)
@@ -490,16 +507,12 @@ statsLabel.TextScaled = true
 statsLabel.TextSize = 10
 statsLabel.Parent = frame
 
--- Update stats (kills, hits)
 RunService.Heartbeat:Connect(function()
     if CONFIG.SHOW_STATS then
         statsLabel.Text = string.format("Kills: %d | Hits: %d", stats.kills, stats.hits)
     end
 end)
 
-print("🔥 Auto Aim Bot - Ultimate Edition Loaded!")
-print("   F1: Toggle GUI")
-print("   F2: Toggle Auto Aim")
-print("   F3: Toggle ESP")
-print("   F4: Toggle Trigger Bot")
-print("   Settings dapat diubah di CONFIG di awal script")
+print("🔥 Auto Aim Bot - Draggable UI Loaded!")
+print("   - Geser GUI dengan menahan area judul")
+print("   - F1: Toggle GUI | F2: Toggle Aim | F3: Toggle ESP | F4: Toggle Trigger")
